@@ -22,8 +22,9 @@ export default class Redshift extends AbstractDriver<RedshiftDataClient, Credent
       return this.connection;
     }
     try {
-      this.connection = new RedshiftDataClient({});
-      return Promise.resolve(this.connection);
+      let rs = new RedshiftDataClient({});
+      this.connection = Promise.resolve(rs);
+      return this.connection;
     } catch (error) {
       return Promise.reject(error);
     }
