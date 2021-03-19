@@ -1,0 +1,90 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "definitions": {
+    "clusterIdentifier": {
+      "title": "Cluster Identifier",
+      "type": "string",
+      "minLength": 1
+    },
+    "database": {
+      "title": "Database",
+      "type": "string",
+      "minLength": 1
+    },
+    "credentialsSource": {
+      "title": "Credentials source",
+      "type": "string",
+      "enum": [
+        "Temporary credentials",
+        "AWS Secrets Manager"
+      ],
+      "default": "Temporary credentials"
+    },
+    "dbUser": {
+      "title": "User",
+      "type": "string",
+      "minLength": 1
+    },
+    "secretArn": {
+      "title": "Secret ARN",
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "dependencies": {
+    "credentialsSource": {
+      "oneOf": [
+        {
+          "properties": {
+            "credentialsSource": {
+              "enum": [
+                "Temporary credentials"
+              ]
+            },
+            "clusterIdentifier": {
+              "$ref": "#/definitions/clusterIdentifier"
+            },
+            "database": {
+              "$ref": "#/definitions/database"
+            },
+            "dbUser": {
+              "$ref": "#/definitions/dbUser"
+            }
+          },
+          "required": [
+            "clusterIdentifier",
+            "database",
+            "dbUser"
+          ]
+        },
+        {
+          "properties": {
+            "credentialsSource": {
+              "enum": [
+                "AWS Secrets Manager"
+              ]
+            },
+            "clusterIdentifier": {
+              "$ref": "#/definitions/clusterIdentifier"
+            },
+            "database": {
+              "$ref": "#/definitions/database"
+            },
+            "secretArn": {
+              "$ref": "#/definitions/secretArn"
+            }
+          },
+          "required": [
+            "clusterIdentifier",
+            "database",
+            "secretArn"
+          ]
+        }
+      ]
+    }
+  },
+  "required": [
+    "credentialsSource"
+  ]
+}
