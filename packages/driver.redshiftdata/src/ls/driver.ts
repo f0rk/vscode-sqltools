@@ -1,20 +1,29 @@
 import { RedshiftDataClient, ExecuteStatementCommand, GetStatementResultCommand } from "@aws-sdk/client-redshift-data";
+import type { ExecuteStatementCommandInput, GetStatementResultCommandInput } from "@aws-sdk/client-redshift-data";
 import Queries from './queries';
 import { IConnectionDriver, NSDatabase, Arg0, ContextValue, MConnectionExplorer } from '@sqltools/types';
-import fs from 'fs';
+import AbstractDriver from '@sqltools/base-driver';
 import zipObject from 'lodash/zipObject';
 import { parse as queryParse } from '@sqltools/util/query';
 import generateId from '@sqltools/util/internal-id';
 
-export default class Redshift implements IConnectionDriver {
+interface Credentials {
+    ClusterIdentifier: string;
+    Database: string;
+    dbUser?: string;
+    secretArn?: string;
+}
+
+export default class Redshift extends AbstractDriver<RedshiftDataClient, Credentials> implements IConnectionDriver {
   queries = Queries;
+
   public async open() {
     if (this.connection) {
       return this.connection;
     }
     try {
       this.connection = new RedshiftDataClient({});
-      return this.connection;
+      return Promise.resolve(this.connection);
     } catch (error) {
       return Promise.reject(error);
     }
@@ -25,8 +34,8 @@ export default class Redshift implements IConnectionDriver {
     this.connection = null;
   }
 
-  private getExecuteCommand: (text) => {
-    const params = {
+  private getExecuteCommand(text) {
+    const params: ExecuteStatementCommandInput = {
       ClusterIdentifier: this.credentials.clusterIdentifier,
       Database: this.credentials.database,
       Sql: text,
@@ -44,17 +53,17 @@ export default class Redshift implements IConnectionDriver {
     return command;
   }
 
-  private runQuery: (client, text) => {
+  private async runQuery(client, text): Promise<any[]> {
     const executeCommand = this.getExecuteCommand(text);
     const executeResult = await client.send(executeCommand);
 
     const results = [];
 
-    const lastToken = executeResult.NextToken;
+    let lastToken;
 
     while (true) {
-      const resultsParams = {
-          Id: executeResult.Id;
+      const resultsParams: GetStatementResultCommandInput = {
+          Id: executeResult.Id,
       };
 
       if (lastToken) {
@@ -76,14 +85,14 @@ export default class Redshift implements IConnectionDriver {
       }
     }
 
-    return results;
+    return Promise.resolve(results);
   }
 
   public query: (typeof AbstractDriver)['prototype']['query'] = (query, opt = {}) => {
     const { requestId } = opt;
     return this.open()
       .then(async (client) => {
-        const results = this.runQuery(client, query.toString());
+        const results = await this.runQuery(client, query.toString());
         return results;
       })
       .then((results: any[] | any) => {
@@ -93,48 +102,35 @@ export default class Redshift implements IConnectionDriver {
         }
 
         return results.map((r, i): NSDatabase.IResult => {
-          const cols = this.getColumnNames(r.fields || []);
+          const cols = this.getColumnNames(r || []);
           return {
             requestId,
             resultId: generateId(),
             connId: this.getId(),
             cols,
-            messages: messages.concat([
-              this.prepareMessage(`${r.command} successfully executed.${
-                r.command.toLowerCase() !== 'select' && typeof r.rowCount === 'number' ? ` ${r.rowCount} rows were affected.` : ''
-              }`)
-            ]),
             query: queries[i],
+            messages: [],
             results: this.mapRows(r.rows, cols),
           };
         });
       })
       .catch(err => {
-        cli && cli.release();
         return [<NSDatabase.IResult>{
           connId: this.getId(),
           requestId,
           resultId: generateId(),
           cols: [],
-          messages: messages.concat([
-            this.prepareMessage ([
-              (err && err.message || err),
-              err && err.routine === 'scanner_yyerror' && err.position ? `at character ${err.position}` : undefined
-            ].filter(Boolean).join(' '))
-          ]),
           error: true,
           rawError: err,
           query,
+          messages: [],
           results: [],
         }];
       });
   }
 
-  private getColumnNames(fields: FieldDef[]): string[] {
-    return fields.reduce((names, { name }) => {
-      const count = names.filter((n) => n === name).length;
-      return names.concat(count > 0 ? `${name} (${count})` : name);
-    }, []);
+  private getColumnNames(r: any): string[] {
+    return Object.keys(r);
   }
 
   private mapRows(rows: any[], columns: string[]): any[] {
@@ -153,7 +149,7 @@ export default class Redshift implements IConnectionDriver {
 
   public async testConnection() {
     const client = await this.open();
-    this.runQuery("SELECT 1");
+    await this.runQuery(client, "SELECT 1");
   }
 
   public async getChildrenForItem({ item, parent }: Arg0<IConnectionDriver['getChildrenForItem']>) {

@@ -4,6 +4,7 @@
     { "path": "./packages/driver.mssql" },
     { "path": "./packages/driver.mysql" },
     { "path": "./packages/driver.pg" },
+    { "path": "./packages/driver.redshiftdata" },
     { "path": "./packages/driver.sqlite" },
     { "path": "./packages/extension" },
     { "path": "./packages/log" },
